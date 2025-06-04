@@ -99,6 +99,7 @@ const VertexCountSelector = () => {
 
 const VertexPoints = ({ geometry, object }) => {
   const { editMode, selectedElements, startVertexDrag } = useSceneStore();
+  const { raycaster, pointer, camera } = useThree();
   const positions = geometry.attributes.position;
   const vertices = [];
   const worldMatrix = object.matrixWorld;
@@ -112,18 +113,29 @@ const VertexPoints = ({ geometry, object }) => {
     vertices.push(vertex);
   }
 
+  const handleVertexClick = (e, index, vertex) => {
+    e.stopPropagation();
+    if (editMode === 'vertex') {
+      const plane = new THREE.Plane();
+      const cameraDirection = new THREE.Vector3();
+      camera.getWorldDirection(cameraDirection);
+      plane.setFromNormalAndCoplanarPoint(cameraDirection, vertex);
+
+      raycaster.setFromCamera(pointer, camera);
+      const intersection = new THREE.Vector3();
+      if (raycaster.ray.intersectPlane(plane, intersection)) {
+        startVertexDrag(index, intersection);
+      }
+    }
+  };
+
   return editMode === 'vertex' ? (
     <group>
       {vertices.map((vertex, i) => (
         <mesh
           key={i}
           position={vertex}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (editMode === 'vertex') {
-              startVertexDrag(i, vertex);
-            }
-          }}
+          onClick={(e) => handleVertexClick(e, i, vertex)}
         >
           <sphereGeometry args={[0.05]} />
           <meshBasicMaterial
@@ -143,11 +155,9 @@ const EdgeLines = ({ geometry, object }) => {
   const edges = [];
   const worldMatrix = object.matrixWorld;
 
-  // Get all edges including vertical ones
   const indices = geometry.index ? Array.from(geometry.index.array) : null;
   
   if (indices) {
-    // For indexed geometry
     for (let i = 0; i < indices.length; i += 3) {
       const addEdge = (a: number, b: number) => {
         const v1 = new THREE.Vector3(
@@ -171,13 +181,11 @@ const EdgeLines = ({ geometry, object }) => {
         });
       };
 
-      // Add all three edges of the triangle
       addEdge(i, i + 1);
       addEdge(i + 1, i + 2);
       addEdge(i + 2, i);
     }
   } else {
-    // For non-indexed geometry
     for (let i = 0; i < positions.count; i += 3) {
       const addEdge = (a: number, b: number) => {
         const v1 = new THREE.Vector3(
@@ -201,7 +209,6 @@ const EdgeLines = ({ geometry, object }) => {
         });
       };
 
-      // Add all three edges of the triangle
       addEdge(i, i + 1);
       addEdge(i + 1, i + 2);
       addEdge(i + 2, i);
@@ -285,10 +292,13 @@ const EditModeOverlay = () => {
 
         raycaster.setFromCamera(pointer, camera);
         if (raycaster.ray.intersectPlane(plane.current, intersection.current)) {
+          const worldToLocal = new THREE.Matrix4().copy(selectedObject.matrixWorld).invert();
+          const localPosition = intersection.current.clone().applyMatrix4(worldToLocal);
+          
           if (draggedVertex) {
-            updateVertexDrag(intersection.current);
+            updateVertexDrag(localPosition);
           } else if (draggedEdge) {
-            updateEdgeDrag(intersection.current);
+            updateEdgeDrag(localPosition);
           }
         }
       }
@@ -342,7 +352,8 @@ const Scene: React.FC = () => {
   useEffect(() => {
     if (editMode === 'vertex' && selectedObject instanceof THREE.Mesh) {
       if (draggedVertex) {
-        setSelectedPosition(draggedVertex.position);
+        const worldPosition = draggedVertex.position.clone().applyMatrix4(selectedObject.matrixWorld);
+        setSelectedPosition(worldPosition);
       } else if (selectedElements.vertices.length > 0) {
         const geometry = selectedObject.geometry;
         const positions = geometry.attributes.position;
@@ -364,7 +375,9 @@ const Scene: React.FC = () => {
 
   const handlePositionChange = (newPosition: THREE.Vector3) => {
     if (selectedObject instanceof THREE.Mesh) {
-      updateVertexDrag(newPosition);
+      const worldToLocal = new THREE.Matrix4().copy(selectedObject.matrixWorld).invert();
+      const localPosition = newPosition.clone().applyMatrix4(worldToLocal);
+      updateVertexDrag(localPosition);
     }
   };
 

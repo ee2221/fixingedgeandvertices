@@ -151,7 +151,6 @@ const VertexPoints = ({ geometry, object }) => {
 
 const EdgeLines = ({ geometry, object }) => {
   const { editMode, selectedElements, startEdgeDrag, draggedEdge } = useSceneStore();
-  const { raycaster, pointer, camera } = useThree();
   const positions = geometry.attributes.position;
   const edges = [];
   const worldMatrix = object.matrixWorld;
@@ -216,22 +215,6 @@ const EdgeLines = ({ geometry, object }) => {
     }
   }
 
-  const handleEdgeClick = (e, vertices, positions, midpoint) => {
-    e.stopPropagation();
-    if (editMode === 'edge') {
-      const plane = new THREE.Plane();
-      const cameraDirection = new THREE.Vector3();
-      camera.getWorldDirection(cameraDirection);
-      plane.setFromNormalAndCoplanarPoint(cameraDirection, midpoint);
-
-      raycaster.setFromCamera(pointer, camera);
-      const intersection = new THREE.Vector3();
-      if (raycaster.ray.intersectPlane(plane, intersection)) {
-        startEdgeDrag(vertices, positions);
-      }
-    }
-  };
-
   return editMode === 'edge' ? (
     <group>
       {edges.map(({ vertices: [v1, v2], positions: [p1, p2], midpoint }, i) => {
@@ -251,7 +234,10 @@ const EdgeLines = ({ geometry, object }) => {
             </line>
             <mesh
               position={midpoint}
-              onClick={(e) => handleEdgeClick(e, [v1, v2], [p1, p2], midpoint)}
+              onClick={(e) => {
+                e.stopPropagation();
+                startEdgeDrag([v1, v2], [p1, p2]);
+              }}
             >
               <sphereGeometry args={[0.08]} />
               <meshBasicMaterial
@@ -300,7 +286,7 @@ const EditModeOverlay = () => {
         } else if (draggedEdge) {
           plane.current.setFromNormalAndCoplanarPoint(
             cameraDirection,
-            draggedEdge.midpoint
+            draggedEdge.positions[0]
           );
         }
 

@@ -28,7 +28,6 @@ interface SceneState {
     positions: THREE.Vector3[];
     initialPositions: THREE.Vector3[];
     connectedVertices: Set<number>;
-    midpoint: THREE.Vector3;
   } | null;
   addObject: (object: THREE.Object3D, name: string) => void;
   removeObject: (id: string) => void;
@@ -212,6 +211,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       const connectedVertices = new Set<number>();
       const edges: number[][] = [];
 
+      // Find all connected vertices
       const findConnectedVertices = (startIndex: number) => {
         if (connectedVertices.has(startIndex)) return;
         connectedVertices.add(startIndex);
@@ -240,15 +240,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
       vertexIndices.forEach(index => findConnectedVertices(index));
 
-      const midpoint = positions[0].clone().add(positions[1]).multiplyScalar(0.5);
-
       return {
         draggedEdge: {
           indices: edges,
           positions: positions,
           initialPositions: positions.map(p => p.clone()),
-          connectedVertices,
-          midpoint
+          connectedVertices
         },
         selectedElements: {
           ...state.selectedElements,
@@ -263,8 +260,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 
       const geometry = state.selectedObject.geometry;
       const positions = geometry.attributes.position;
-      const offset = position.clone().sub(state.draggedEdge.midpoint);
+      const offset = position.clone().sub(state.draggedEdge.initialPositions[0]);
 
+      // Move all connected vertices together
       state.draggedEdge.connectedVertices.forEach(vertexIndex => {
         const currentPos = new THREE.Vector3(
           positions.getX(vertexIndex),
@@ -281,7 +279,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       return {
         draggedEdge: {
           ...state.draggedEdge,
-          midpoint: position.clone()
+          initialPositions: [position.clone()]
         }
       };
     }),
